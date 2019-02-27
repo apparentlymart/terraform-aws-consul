@@ -81,3 +81,4 @@ variable "key_file_path" {
   description = "Path to the certificate key used to verify incoming connections."
   default     = "/opt/consul/tls/consul.key.pem"
 }
+
