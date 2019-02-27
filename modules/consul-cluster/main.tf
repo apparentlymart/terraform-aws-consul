@@ -31,19 +31,24 @@ resource "aws_autoscaling_group" "autoscaling_group" {
 
   enabled_metrics = var.enabled_metrics
 
-  tags = [
-    {
-      key                 = "Name"
-      value               = var.cluster_name
-      propagate_at_launch = true
-    },
-    {
-      key                 = var.cluster_tag_key
-      value               = var.cluster_tag_value
-      propagate_at_launch = true
-    },
-    var.tags,
-  ]
+  tag {
+    key                 = "Name"
+    value               = var.cluster_name
+    propagate_at_launch = true
+  }
+  tag {
+    key                 = var.cluster_tag_key
+    value               = var.cluster_tag_value
+    propagate_at_launch = true
+  }
+  dynamic "tag" {
+    for_each = var.tags
+    content {
+      key                 = tag.value.key
+      value               = tag.value.value
+      propagate_at_launch = tag.value.propagate_at_launch
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -62,18 +67,10 @@ resource "aws_launch_configuration" "launch_configuration" {
     0,
   ) : var.iam_instance_profile_name
   key_name = var.ssh_key_name
-  # TF-UPGRADE-TODO: In Terraform v0.10 and earlier, it was sometimes necessary to
-  # force an interpolation expression to be interpreted as a list by wrapping it
-  # in an extra set of list brackets. That form was supported for compatibilty in
-  # v0.11, but is no longer supported in Terraform v0.12.
-  #
-  # If the expression in the following list itself returns a list, remove the
-  # brackets to avoid interpretation as a list of lists. If the expression
-  # returns a single list item then leave it as-is and remove this TODO comment.
-  security_groups = [concat(
+  security_groups = concat(
     [aws_security_group.lc_security_group.id],
     var.additional_security_group_ids,
-  )]
+  )
   placement_tenancy           = var.tenancy
   associate_public_ip_address = var.associate_public_ip_address
 
@@ -161,7 +158,7 @@ module "security_group_rules" {
   source = "../consul-security-group-rules"
 
   security_group_id                    = aws_security_group.lc_security_group.id
-  allowed_inbound_cidr_blocks          = [var.allowed_inbound_cidr_blocks]
+  allowed_inbound_cidr_blocks          = var.allowed_inbound_cidr_blocks
   allowed_inbound_security_group_ids   = var.allowed_inbound_security_group_ids
   allowed_inbound_security_group_count = var.allowed_inbound_security_group_count
 
@@ -180,7 +177,7 @@ module "security_group_rules" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_iam_instance_profile" "instance_profile" {
-  count = var.enable_iam_setup
+  count = var.enable_iam_setup ? 1 : 0
 
   name_prefix = var.cluster_name
   path        = var.instance_profile_path
@@ -195,7 +192,7 @@ resource "aws_iam_instance_profile" "instance_profile" {
 }
 
 resource "aws_iam_role" "instance_role" {
-  count = var.enable_iam_setup
+  count = var.enable_iam_setup ? 1 : 0
 
   name_prefix        = var.cluster_name
   assume_role_policy = data.aws_iam_policy_document.instance_role.json
